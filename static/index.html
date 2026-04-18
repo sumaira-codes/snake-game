@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SNAKE//</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --dim-green: #003b0f;
+    --bright: #ccffcc;
+    --bg: #020c02;
+    --grid: #0a1a0a;
+    --accent: #00cc33;
+    --danger: #ff2244;
+    --gold: #ffd700;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* CRT scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.12) 2px,
+      rgba(0,0,0,0.12) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* CRT flicker */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+    pointer-events: none;
+    z-index: 998;
+    animation: flicker 8s infinite;
+  }
+
+  @keyframes flicker {
+    0%,95%,100% { opacity: 1; }
+    96% { opacity: 0.85; }
+    97% { opacity: 1; }
+    98% { opacity: 0.9; }
+  }
+
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .logo {
+    font-family: 'VT323', monospace;
+    font-size: 56px;
+    color: var(--green);
+    letter-spacing: 8px;
+    text-shadow:
+      0 0 10px var(--green),
+      0 0 30px rgba(0,255,65,0.4),
+      0 0 60px rgba(0,255,65,0.15);
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%,100% { text-shadow: 0 0 10px var(--green), 0 0 30px rgba(0,255,65,0.4); }
+    50% { text-shadow: 0 0 20px var(--green), 0 0 50px rgba(0,255,65,0.6), 0 0 80px rgba(0,255,65,0.2); }
+  }
+
+  .tagline {
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 4px;
+    opacity: 0.7;
+  }
+
+  /* Scoreboard */
+  .scoreboard {
+    display: flex;
+    gap: 32px;
+    padding: 10px 24px;
+    border: 1px solid var(--dim-green);
+    background: rgba(0,255,65,0.03);
+    position: relative;
+  }
+
+  .scoreboard::before, .scoreboard::after {
+    content: '◈';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    opacity: 0.5;
+    font-size: 10px;
+  }
+  .scoreboard::before { left: 6px; }
+  .scoreboard::after { right: 6px; }
+
+  .score-item { display: flex; flex-direction: column; align-items: center; }
+  .score-label { font-size: 9px; color: var(--accent); letter-spacing: 2px; opacity: 0.6; }
+  .score-value {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    color: var(--bright);
+    text-shadow: 0 0 8px var(--green);
+    min-width: 60px;
+    text-align: center;
+  }
+
+  /* Canvas container */
+  .canvas-wrap {
+    position: relative;
+    border: 2px solid var(--accent);
+    box-shadow:
+      0 0 0 1px var(--dim-green),
+      0 0 20px rgba(0,255,65,0.2),
+      inset 0 0 30px rgba(0,0,0,0.5);
+  }
+
+  canvas {
+    display: block;
+    background: var(--grid);
+    image-rendering: pixelated;
+  }
+
+  /* Overlay (start / pause / game over) */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(2, 12, 2, 0.88);
+    gap: 16px;
+    transition: opacity 0.3s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .overlay-title {
+    font-family: 'VT323', monospace;
+    font-size: 42px;
+    color: var(--green);
+    text-shadow: 0 0 15px var(--green);
+    animation: blink 1s step-start infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .overlay-sub {
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    opacity: 0.8;
+  }
+
+  .final-score {
+    font-family: 'VT323', monospace;
+    font-size: 28px;
+    color: var(--gold);
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--bg);
+    background: var(--green);
+    border: none;
+    padding: 10px 28px;
+    cursor: pointer;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .btn:hover {
+    background: var(--bright);
+    box-shadow: 0 0 15px var(--green);
+  }
+  .btn:active { transform: scale(0.97); }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn-pause {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--green);
+    background: transparent;
+    border: 1px solid var(--accent);
+    padding: 6px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .btn-pause:hover {
+    background: rgba(0,255,65,0.1);
+    box-shadow: 0 0 8px rgba(0,255,65,0.3);
+  }
+
+  /* Footer key hint */
+  .hints {
+    font-size: 9px;
+    color: var(--accent);
+    opacity: 0.45;
+    letter-spacing: 2px;
+    display: flex;
+    gap: 16px;
+  }
+
+  /* Flash effect on eating */
+  .flash {
+    animation: flash-anim 0.15s linear;
+  }
+  @keyframes flash-anim {
+    0%,100% { box-shadow: 0 0 20px rgba(0,255,65,0.2); }
+    50% { box-shadow: 0 0 40px rgba(0,255,65,0.8), 0 0 80px rgba(0,255,65,0.4); }
+  }
+
+  /* Status bar */
+  .status-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--accent);
+    opacity: 0.5;
+    letter-spacing: 1px;
+    padding: 0 2px;
+  }
+
+  /* Mobile arrow pad */
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .dpad-btn {
+    background: rgba(0,255,65,0.08);
+    border: 1px solid var(--dim-green);
+    color: var(--green);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dpad-btn:active, .dpad-btn.pressed {
+    background: rgba(0,255,65,0.25);
+    border-color: var(--green);
+    box-shadow: 0 0 10px rgba(0,255,65,0.3);
+  }
+  .dpad-empty { background: transparent; border: none; cursor: default; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="logo">SNAKE//</div>
+    <div class="tagline">TERMINAL EDITION · v2.0</div>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-item">
+      <div class="score-label">SCORE</div>
+      <div class="score-value" id="score">0</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">LENGTH</div>
+      <div class="score-value" id="length">3</div>
+    </div>
+    <div class="score-item">
+      <div class="score-label">BEST</div>
+      <div class="score-value" id="highscore">0</div>
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <canvas id="game" width="400" height="400"></canvas>
+
+    <div class="overlay" id="overlay">
+      <div class="overlay-title" id="overlay-title">SNAKE//</div>
+      <div class="overlay-sub" id="overlay-sub">PRESS START TO PLAY</div>
+      <div class="final-score" id="final-score" style="display:none"></div>
+      <button class="btn" id="startBtn">▶ START</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="status-text">AWAITING INPUT</span>
+    <span id="api-status">API: READY</span>
+  </div>
+
+  <div class="controls">
+    <button class="btn-pause" id="pauseBtn" style="display:none">⏸ PAUSE</button>
+  </div>
+
+  <!-- D-Pad for mobile -->
+  <div class="dpad">
+    <div class="dpad-empty"></div>
+    <button class="dpad-btn" id="dUp" aria-label="Up">▲</button>
+    <div class="dpad-empty"></div>
+    <button class="dpad-btn" id="dLeft" aria-label="Left">◀</button>
+    <div class="dpad-empty"></div>
+    <button class="dpad-btn" id="dRight" aria-label="Right">▶</button>
+    <div class="dpad-empty"></div>
+    <button class="dpad-btn" id="dDown" aria-label="Down">▼</button>
+    <div class="dpad-empty"></div>
+  </div>
+
+  <div class="hints">
+    <span>ARROWS / WASD — MOVE</span>
+    <span>P — PAUSE</span>
+    <span>R — RESTART</span>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API = 'http://127.0.0.1:8000'; // same origin
+const CELL  = 20;
+const COLS  = 20;
+const ROWS  = 20;
+const TICK_MS = 130;        // game speed
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const canvas    = document.getElementById('game');
+const ctx       = canvas.getContext('2d');
+const overlay   = document.getElementById('overlay');
+const oTitle    = document.getElementById('overlay-title');
+const oSub      = document.getElementById('overlay-sub');
+const oFinal    = document.getElementById('final-score');
+const startBtn  = document.getElementById('startBtn');
+const pauseBtn  = document.getElementById('pauseBtn');
+const scoreEl   = document.getElementById('score');
+const lengthEl  = document.getElementById('length');
+const hsEl      = document.getElementById('highscore');
+const statusEl  = document.getElementById('status-text');
+const apiEl     = document.getElementById('api-status');
+const wrap      = document.getElementById('canvas-wrap');
+
+// ── Audio (Web Audio API) ────────────────────────────────────────────────────
+let AC = null;
+function getAC() {
+  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume();
+  return AC;
+}
+
+function playEat() {
+  const AC = getAC();
+  const o = AC.createOscillator();
+  const g = AC.createGain();
+  o.connect(g); g.connect(AC.destination);
+  o.type = 'square';
+  o.frequency.setValueAtTime(440, AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(880, AC.currentTime + 0.06);
+  g.gain.setValueAtTime(0.18, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.12);
+  o.start(); o.stop(AC.currentTime + 0.12);
+}
+
+function playCollision() {
+  const AC = getAC();
+  // Noise burst
+  const buf = AC.createBuffer(1, AC.sampleRate * 0.25, AC.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.5, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.25);
+  src.connect(g); g.connect(AC.destination);
+  src.start(); src.stop(AC.currentTime + 0.25);
+
+  // Descending tone
+  const o = AC.createOscillator();
+  const g2 = AC.createGain();
+  o.connect(g2); g2.connect(AC.destination);
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(200, AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(40, AC.currentTime + 0.4);
+  g2.gain.setValueAtTime(0.25, AC.currentTime);
+  g2.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.4);
+  o.start(); o.stop(AC.currentTime + 0.4);
+}
+
+function resumeAudio() {
+  getAC(); // ensures AudioContext is created and resumed
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let state    = null;
+let ticker   = null;
+let highscore = 0;
+let lastEvent = null;
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function apiCall(path, method = 'GET', body = null) {
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(API + path, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    apiEl.textContent = 'API: OK';
+    return await r.json();
+  } catch (e) {
+    apiEl.textContent = 'API: ERR';
+    console.error(e);
+    return null;
+  }
+}
+
+// ── Game flow ────────────────────────────────────────────────────────────────
+async function startGame() {
+  resumeAudio();
+  state = await apiCall('/api/game/start', 'POST');
+  if (!state) return;
+
+  // Load highscore
+  const hs = await apiCall('/api/game/highscore');
+  if (hs) { highscore = hs.highscore; hsEl.textContent = highscore; }
+
+  overlay.classList.add('hidden');
+  pauseBtn.style.display = '';
+  statusEl.textContent = 'RUNNING';
+
+  clearInterval(ticker);
+  ticker = setInterval(gameTick, TICK_MS);
+}
+
+async function gameTick() {
+  const s = await apiCall('/api/game/tick', 'POST');
+  if (!s) return;
+  state = s;
+  applyEvent(s);
+  updateUI(s);
+  draw(s);
+  if (s.status === 'game_over') endGame(s);
+}
+
+function applyEvent(s) {
+  if (s.event === 'ate' && lastEvent !== 'ate') {
+    playEat();
+    wrap.classList.remove('flash');
+    void wrap.offsetWidth;
+    wrap.classList.add('flash');
+  }
+  if (s.event === 'collision') {
+    playCollision();
+  }
+  lastEvent = s.event;
+}
+
+async function endGame(s) {
+  clearInterval(ticker);
+  pauseBtn.style.display = 'none';
+  statusEl.textContent = 'GAME OVER';
+
+  // Update high score
+  await apiCall('/api/game/highscore', 'POST');
+  const hs = await apiCall('/api/game/highscore');
+  if (hs) { highscore = hs.highscore; hsEl.textContent = highscore; }
+
+  oTitle.textContent = 'GAME OVER';
+  oSub.textContent   = 'COLLISION DETECTED';
+  oFinal.textContent = `FINAL SCORE: ${s.score}`;
+  oFinal.style.display = '';
+  startBtn.textContent = '↺ RETRY';
+  overlay.classList.remove('hidden');
+}
+
+async function togglePause() {
+  resumeAudio();
+  const s = await apiCall('/api/game/pause', 'POST');
+  if (!s) return;
+  state = s;
+  if (s.status === 'paused') {
+    clearInterval(ticker);
+    pauseBtn.textContent = '▶ RESUME';
+    statusEl.textContent = 'PAUSED';
+  } else {
+    ticker = setInterval(gameTick, TICK_MS);
+    pauseBtn.textContent = '⏸ PAUSE';
+    statusEl.textContent = 'RUNNING';
+  }
+}
+
+async function changeDirection(dir) {
+  resumeAudio();
+  if (!state || state.status !== 'running') return;
+  await apiCall('/api/game/direction', 'POST', { direction: dir });
+}
+
+// ── UI update ────────────────────────────────────────────────────────────────
+function updateUI(s) {
+  scoreEl.textContent  = s.score;
+  lengthEl.textContent = s.snake.length;
+}
+
+// ── Drawing ──────────────────────────────────────────────────────────────────
+const COLORS = {
+  bg:       '#020c02',
+  gridLine: 'rgba(0,255,65,0.04)',
+  snakeHead:'#00ff41',
+  snakeBody:'#00cc33',
+  snakeDark:'#007a1f',
+  food:     '#ff2244',
+  foodGlow: 'rgba(255,34,68,0.4)',
+};
+
+let foodPulse = 0;
+
+function draw(s) {
+  foodPulse = (foodPulse + 0.12) % (Math.PI * 2);
+
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = COLORS.gridLine;
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= COLS; x++) {
+    ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(canvas.width, y * CELL); ctx.stroke();
+  }
+
+  // Food
+  const [fx, fy] = s.food;
+  const fp = 0.5 + 0.5 * Math.sin(foodPulse);
+  const fr = CELL * 0.32 + fp * 2;
+  ctx.shadowColor  = COLORS.foodGlow;
+  ctx.shadowBlur   = 12 + fp * 8;
+  ctx.fillStyle    = COLORS.food;
+  ctx.beginPath();
+  ctx.arc(fx * CELL + CELL/2, fy * CELL + CELL/2, fr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Snake
+  s.snake.forEach((seg, i) => {
+    const [sx, sy] = seg;
+    const t   = i / s.snake.length;
+    const pad = i === 0 ? 1 : 2;
+    const r   = CELL - pad * 2;
+
+    if (i === 0) {
+      ctx.shadowColor = COLORS.snakeHead;
+      ctx.shadowBlur  = 10;
+      ctx.fillStyle   = COLORS.snakeHead;
+    } else {
+      ctx.shadowBlur  = 0;
+      // Gradient from bright to dark along body
+      const luma = Math.round(0x33 + (0xcc - 0x33) * (1 - t));
+      ctx.fillStyle = `rgb(0,${luma},${Math.round(luma * 0.15)})`;
+    }
+
+    ctx.fillRect(sx * CELL + pad, sy * CELL + pad, r, r);
+
+    // Head eyes
+    if (i === 0) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle  = COLORS.bg;
+      const ex = sx * CELL + pad + 3;
+      const ey = sy * CELL + pad + 3;
+      ctx.fillRect(ex,        ey,     3, 3);
+      ctx.fillRect(ex + r - 6, ey,   3, 3);
+    }
+  });
+  ctx.shadowBlur = 0;
+
+  // Game over flash
+  if (s.status === 'game_over') {
+    ctx.fillStyle = 'rgba(255,34,68,0.08)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+// ── Input ────────────────────────────────────────────────────────────────────
+const keyMap = {
+  ArrowUp:'UP', ArrowDown:'DOWN', ArrowLeft:'LEFT', ArrowRight:'RIGHT',
+  w:'UP', s:'DOWN', a:'LEFT', d:'RIGHT',
+  W:'UP', S:'DOWN', A:'LEFT', D:'RIGHT',
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'p' || e.key === 'P') { if (state) togglePause(); return; }
+  if (e.key === 'r' || e.key === 'R') { startGame(); return; }
+  const dir = keyMap[e.key];
+  if (dir) { e.preventDefault(); changeDirection(dir); }
+});
+
+// D-Pad
+[['dUp','UP'],['dDown','DOWN'],['dLeft','LEFT'],['dRight','RIGHT']].forEach(([id,dir]) => {
+  const btn = document.getElementById(id);
+  const press = () => { btn.classList.add('pressed'); changeDirection(dir); };
+  const release = () => btn.classList.remove('pressed');
+  btn.addEventListener('touchstart', e => { e.preventDefault(); press(); }, { passive: false });
+  btn.addEventListener('touchend',   e => { e.preventDefault(); release(); }, { passive: false });
+  btn.addEventListener('mousedown',  press);
+  btn.addEventListener('mouseup',    release);
+});
+
+startBtn.addEventListener('click', startGame);
+pauseBtn.addEventListener('click', togglePause);
+
+// Initial idle draw
+(function idleDraw() {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = COLORS.gridLine;
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= COLS; x++) {
+    ctx.beginPath(); ctx.moveTo(x*CELL,0); ctx.lineTo(x*CELL,canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    ctx.beginPath(); ctx.moveTo(0,y*CELL); ctx.lineTo(canvas.width,y*CELL); ctx.stroke();
+  }
+})();
+</script>
+</body>
+</html>
